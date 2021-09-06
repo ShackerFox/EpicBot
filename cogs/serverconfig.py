@@ -24,15 +24,15 @@ from config import (
     EMOJIS, WEBSITE_LINK, SUPPORT_SERVER_LINK,
     MAIN_COLOR, DISABLE, PREMIUM_GUILDS,
     RED_COLOR, ENABLE, custom_cmds_tags_lemao,
-    DEFAULT_WELCOME_MSG, DEFAULT_TWITCH_MSG,
-    DEFAULT_LEAVE_MSG, DEFAULT_AUTOMOD_CONFIG,
-    GLOBAL_CHAT_RULES, DEFAULT_LEVEL_UP_MSG,
-    BADGE_EMOJIS, ANTIHOIST_CHARS, EMOJIS_FOR_COGS
+    DEFAULT_WELCOME_MSG, DEFAULT_LEAVE_MSG,
+    DEFAULT_AUTOMOD_CONFIG, GLOBAL_CHAT_RULES,
+    DEFAULT_LEVEL_UP_MSG, BADGE_EMOJIS, ANTIHOIST_CHARS,
+    EMOJIS_FOR_COGS
 )
 from utils.embed import error_embed, success_embed, process_embeds_from_json
 from utils.bot import EpicBot
-from utils.ui import Confirm, SelfRoleEditor, SelfRoleOptionSelecter, TicketView
-from utils.converters import AddRemoveConverter, Lower
+from utils.ui import Confirm, Paginator, SelfRoleEditor, SelfRoleOptionSelecter, TicketView
+from utils.converters import AddRemoveConverter, Category, Lower
 from utils.message import wait_for_msg
 from utils.recursive_utils import prepare_emojis_and_roles
 from utils.reactions import prepare_rolemenu
@@ -71,7 +71,8 @@ class config(commands.Cog, description="Configure your server with amazing EpicB
             'help', 'ping', 'invite', 'vote', 'support',
             'credits', 'uptime', 'privacy', 'bugreport',
             'disable', 'enable', 'disabled_list', 'prefix',
-            'autopost', 'customcommand', 'customlist'
+            'autopost', 'customcommand', 'customlist', 'disablecategory',
+            'enablecategory'
         ]
         self.actual_autoposting_lmao.start()
 
@@ -96,7 +97,7 @@ class config(commands.Cog, description="Configure your server with amazing EpicB
             print(f"ERROR in getting image for {url} in autoposting: {e}")
             return 'pain'
 
-    async def get_webhook_autopost(self, channel_id: int):
+    async def get_webhook_autopost(self, channel_id: int) -> discord.Webhook:
         channel = self.client.get_channel(channel_id)
         if not channel:
             return False
@@ -118,7 +119,7 @@ class config(commands.Cog, description="Configure your server with amazing EpicB
     async def send_from_webhook_autopost(self, webhook, embed):
         await webhook.send(
             embed=embed,
-            avatar_url=self.client.user.avatar.url
+            avatar_url=self.client.user.display_avatar.url
         )
 
     @tasks.loop(seconds=autoposting_delay)
@@ -180,7 +181,7 @@ class config(commands.Cog, description="Configure your server with amazing EpicB
     @commands.has_permissions(manage_guild=True, manage_roles=True)
     @commands.bot_has_permissions(administrator=True)
     @commands.cooldown(3, 120, commands.BucketType.guild)
-    @commands.max_concurrency(1, commands.BucketType.guild)
+    @commands.max_concurrency(3, commands.BucketType.guild)
     async def selfroles(self, ctx: commands.Context, option: Lower = None, message_id: t.Optional[int] = None):
         async with ctx.typing():
             prefix = ctx.clean_prefix
@@ -209,8 +210,8 @@ The server currently has **{len(role_menus)}** role menu{'s' if len(role_menus) 
                 ctx.command.reset_cooldown(ctx)
                 return await ctx.reply(embed=info_embed)
             if option in ['create', 'new']:
-                if len(role_menus) >= 10:
-                    return await ctx.reply("You can only have max `10` rolemenus.")
+                if len(role_menus) >= 20:
+                    return await ctx.reply("You can only have max `20` rolemenus.")
                 view = SelfRoleOptionSelecter(ctx)
                 main_msg = await ctx.reply(embed=success_embed(
                     f"{EMOJIS['loading']} Rolemenu creation...",
@@ -280,6 +281,8 @@ The server currently has **{len(role_menus)}** role menu{'s' if len(role_menus) 
                     f"I have found **{len(roles)}** in your message.\n\n{' '.join(role.mention for role in roles)}\n\nNow you need to react to this message with the corresponding emojis for the rolemenu to be complete!"
                 ), view=None)
                 final_output = await prepare_emojis_and_roles(ctx, roles, main_msg)
+                if final_output is None:
+                    return
                 msg_id = await prepare_rolemenu(ctx, final_output, text_channel, self_role_type, custom_msg_id)
                 role_menus = guild_self_roles['role_menus']
                 role_menus.update({
@@ -338,7 +341,7 @@ The server currently has **{len(role_menus)}** role menu{'s' if len(role_menus) 
                 ), view=view)
                 await view.wait()
                 if not view.value:
-                    ctx.command.reset_cooldown()
+                    ctx.command.reset_cooldown(ctx)
                     return await main_msg.edit(content=f"{EMOJIS['tick_no']}Command cancelled.", embed=None, view=None)
                 if view.value == 'add':
                     await main_msg.edit(embed=success_embed(
@@ -368,6 +371,8 @@ The server currently has **{len(role_menus)}** role menu{'s' if len(role_menus) 
                         f"I have found **{len(roles)}** in your message.\n\n{' '.join(role.mention for role in roles)}\n\nNow you need to react to this message with the corresponding emojis for the rolemenu to be complete!"
                     ), view=None)
                     final_output = await prepare_emojis_and_roles(ctx, roles, main_msg)
+                    if final_output is None:
+                        return
                     current_role_menu = role_menus[str(message_id)]
                     stuff = current_role_menu['stuff']
                     for role_id, emoji in final_output.items():
@@ -379,7 +384,7 @@ The server currently has **{len(role_menus)}** role menu{'s' if len(role_menus) 
                         update={"$set": {"role_menus": role_menus}}
                     )
                     await prepare_rolemenu(ctx, stuff, self.client.get_channel(current_role_menu['channel']), current_role_menu['type'], message_id, edit=True)
-                    return await main_msg.edit(f"{EMOJIS['tick_yes']}The rolemenu has been updated!", embed=None, view=None)
+                    return await main_msg.edit(content=f"{EMOJIS['tick_yes']}The rolemenu has been updated!", embed=None, view=None)
                 if view.value == 'remove':
                     current_role_menu = role_menus[str(message_id)]
                     if len(current_role_menu['stuff']) == 1:
@@ -421,17 +426,17 @@ The server currently has **{len(role_menus)}** role menu{'s' if len(role_menus) 
                         update={"$set": {"role_menus": role_menus}}
                     )
                     await prepare_rolemenu(ctx, stuff, self.client.get_channel(current_role_menu['channel']), current_role_menu['type'], message_id, edit=True)
-                    return await main_msg.edit(f"{EMOJIS['tick_yes']}The rolemenu has been updated!", embed=None, view=None)
+                    return await main_msg.edit(content=f"{EMOJIS['tick_yes']}The rolemenu has been updated!", embed=None, view=None)
 
             await ctx.reply(embed=info_embed)
 
-    @commands.command(help="Setup everything you'll ever need.")
-    @commands.has_permissions(administrator=True)
-    @commands.bot_has_permissions(administrator=True)
-    @commands.cooldown(3, 30, commands.BucketType.user)
-    @commands.max_concurrency(1, commands.BucketType.guild)
-    async def setup(self, ctx: commands.Context):
-        return await ctx.reply("work in progress")
+    # @commands.command(help="Setup everything you'll ever need.")
+    # @commands.has_permissions(administrator=True)
+    # @commands.bot_has_permissions(administrator=True)
+    # @commands.cooldown(3, 30, commands.BucketType.user)
+    # @commands.max_concurrency(1, commands.BucketType.guild)
+    # async def setup(self, ctx: commands.Context):
+    #     return await ctx.reply("work in progress")
 
     @commands.cooldown(3, 60, commands.BucketType.user)
     @commands.has_guild_permissions(manage_guild=True)
@@ -753,6 +758,60 @@ You can also use `@{self.client.user.name}`
                 return await ctx.reply(f"{EMOJIS['tick_yes']}The prefix `{prefix}` has been added.")
 
     @commands.has_guild_permissions(manage_guild=True)
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    @commands.command(help="Disable a command category in your server!", aliases=['disable_category'])
+    async def disablecategory(self, ctx: commands.Context, category: Category = None):
+        if category is None:
+            ctx.command.reset_cooldown(ctx)
+            return await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Invalid Usage!",
+                "Please specify a category to disable."
+            ))
+        category: commands.Cog = category  # dont mind me type hinting :scared:
+        prefix = ctx.clean_prefix
+        g = await self.client.get_guild_config(ctx.guild.id)
+        disabled_categories: list = g.get('disabled_categories', [])
+        if category.qualified_name in disabled_categories:
+            ctx.command.reset_cooldown(ctx)
+            return await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Already disabled!",
+                f"The category `{category.qualified_name}` is already disabled."
+            ).set_footer(text=f"You can use \"{prefix}disabled\" to get a list of all disabled commands/categories."))
+        disabled_categories.append(category.qualified_name)
+        g.update({'disabled_categories': disabled_categories})
+        return await ctx.reply(embed=success_embed(
+            f"{EMOJIS['tick_yes']} Category disabled!",
+            f"The category `{category.qualified_name}` has been disabled."
+        ).set_footer(text=f"You can use \"{prefix}disabled\" to get a list of all disabled commands/categories."))
+
+    @commands.has_guild_permissions(manage_guild=True)
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    @commands.command(help="Enable a command category in your server!", aliases=['enable_category'])
+    async def enablecategory(self, ctx: commands.Context, category: Category = None):
+        if category is None:
+            ctx.command.reset_cooldown(ctx)
+            return await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Invalid Usage!",
+                "Please specify a category to enable."
+            ))
+        category: commands.Cog = category
+        prefix = ctx.clean_prefix
+        g = await self.client.get_guild_config(ctx.guild.id)
+        disabled_categories: list = g.get('disabled_categories', [])
+        if category.qualified_name not in disabled_categories:
+            ctx.command.reset_cooldown(ctx)
+            return await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Already enabled!",
+                f"The category `{category.qualified_name}` is already enabled."
+            ).set_footer(text=f"You can use \"{prefix}disabled\" to get a list of all disabled commands/categories."))
+        disabled_categories.remove(category.qualified_name)
+        g.update({'disabled_categories': disabled_categories})
+        return await ctx.reply(embed=success_embed(
+            f"{EMOJIS['tick_yes']} Category enabled!",
+            f"The category `{category.qualified_name}` has been enabled."
+        ).set_footer(text=f"You can use \"{prefix}disabled\" to get a list of all disabled commands/categories."))
+
+    @commands.has_guild_permissions(manage_guild=True)
     @commands.cooldown(3, 20, commands.BucketType.user)
     @commands.command(help="Disable a command in your server!")
     async def disable(self, ctx: commands.Context, setting: t.Union[discord.TextChannel, str] = None):
@@ -842,25 +901,29 @@ You can also use `@{self.client.user.name}`
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def disabled_list(self, ctx: commands.Context):
         guild_config = await self.client.get_guild_config(ctx.guild.id)
-        ğ = guild_config['disabled_cmds']
-        amogus = guild_config['disabled_channels']
-        text = ""
-        if len(ğ) == 0:
-            text = "No commands are disabled :)"
-        else:
-            for e in ğ:
-                text += f"`{e}`, "
-            text = text[:-2]
-        text_ = ""
-        if len(amogus) == 0:
-            text_ = "No channels are disabled :)"
-        else:
-            for ee in amogus:
-                text_ += f"<#{ee}>\n"
+        cmds = guild_config['disabled_cmds']
+        channels = guild_config['disabled_channels']
+        categories = guild_config['disabled_categories']
         embed = success_embed(
-            "🛠️  Disabled list!",
-            f"**`{len(ğ)}` Disabled commands:**\n{text}\n\n**`{len(amogus)}` Disabled channels:**\n{text_}"
+            "Disabled list!",
+            "These are all the disabled commands/channels/categories for this server!"
         )
+        embed.add_field(
+            name=f"[ {len(cmds)}/{len(self.client.commands)} ] Commands",
+            value=', '.join(f"`{cmd}`" for cmd in cmds) or "No disabled commands :)",
+            inline=False
+        )
+        embed.add_field(
+            name=f"[ {len(channels)}/{len(ctx.guild.text_channels)} ] Channels",
+            value='\n'.join(f"<#{channel}>" for channel in channels) or "No disabled channels :)",
+            inline=False
+        )
+        embed.add_field(
+            name=f"[ {len(categories)}/{len([cog for cog in self.client.cogs if cog.lower() == cog and len(self.client.get_cog(cog).get_commands()) != 0])} ] Categories",
+            value=', '.join(f"`{category}`" for category in categories) or "No disabled categories :)",
+            inline=False
+        )
+
         return await ctx.reply(embed=embed)
 
     async def wait_for_msg(self, ctx: commands.Context, timeout, msg_to_edit) -> discord.Message:
@@ -1142,19 +1205,27 @@ Here are the tags that you can use in custom commands:
         if "custom_cmds" not in guild_config:
             guild_config.update({"custom_cmds": []})
         custom_cmds_list = guild_config["custom_cmds"]
-        text = ""
         if len(custom_cmds_list) == 0:
-            text = f"There are no custom commands for this server!\nPlease use `{prefix}cc create` to create a custom command!"
+            return await ctx.reply(embed=success_embed(
+                f"{EMOJIS['settings_color']} Custom commands list",
+                f"There are no custom commands for this server!\nPlease use `{prefix}cc create` to create a custom command!"
+            ))
         else:
+            paginator = commands.Paginator(prefix="", suffix="", max_size=500)
             i = 1
             for e in custom_cmds_list:
-                text += f"{i} - `{e['name']}` - {e['desc']}\n"
+                paginator.add_line(f"{i} - `{e['name']}` - {e['desc']}")
                 i += 1
-        embed = success_embed(
-            f"{EMOJIS['settings_color']} Custom Commands ({len(custom_cmds_list)})",
-            text
-        )
-        return await ctx.reply(embed=embed)
+        embeds = []
+        for page in paginator.pages:
+            embeds.append(success_embed(
+                f"{EMOJIS['settings_color']} Custom commands list",
+                page
+            ))
+        if len(embeds) == 1:
+            return await ctx.reply(embed=embeds[0])
+        view = Paginator(ctx, embeds)
+        return await ctx.reply(embed=embeds[0], view=view)
 
     @commands.has_guild_permissions(manage_guild=True)
     @commands.bot_has_guild_permissions(manage_guild=True)
@@ -1695,164 +1766,6 @@ In order to configure your autorole settings, you can use the following commands
 
     @commands.has_permissions(manage_guild=True)
     @commands.cooldown(3, 30, commands.BucketType.user)
-    @commands.command(help="Configure Twitch live notifications for your server!")
-    async def twitch(self, ctx: commands.Context, configuration=None):
-
-        notset = '❌ Not Set'
-        guild_config = await self.client.get_guild_config(ctx.guild.id)
-        twitch_config = guild_config['twitch']
-        prefix = ctx.clean_prefix
-        main_msg = await ctx.reply(embed=discord.Embed(title=f"Working on it... {EMOJIS['loading']}", color=MAIN_COLOR))
-        enabled = False if twitch_config['channel_id'] is None else True
-        not_enabled_embed = error_embed(
-            f"{EMOJIS['tick_no']} Not enabled!",
-            f"Twitch messages are not enabled yet!\nPlease enable them and try again.\nUsage: `{prefix}twitch enable`"
-        )
-        if 'message' not in twitch_config or 'currently_live' not in twitch_config:
-            twitch_config.update({"message": None, "currently_live": False})
-        if configuration is None:
-            embed = success_embed(
-                f"{EMOJIS['twitch']} Twitch Configuration!",
-                f"""
-**Streamer:** `{notset if twitch_config['username'] is None else twitch_config['username']}`
-**Channel:** {('`'+notset+'`') if twitch_config['channel_id'] is None else '<#'+str(twitch_config['channel_id'])+'>'}
-**Message:** ```
-{DEFAULT_TWITCH_MSG if twitch_config['message'] is None else twitch_config['message']}
-```
-**You can use the following commands to modify it:**
-
-`{prefix}twitch {'disable' if enabled else 'enable'}` - To enable/disable twitch live messages.
-`{prefix}twitch streamer` - To change the twitch streamer.
-`{prefix}twitch channel` - To change the twitch channel.
-`{prefix}twitch message` - To change the twitch live message.
-                """
-            )
-            embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/775735414362734622/852899330464415754/twitch_logo.png")
-            return await main_msg.edit(embed=embed)
-        elif configuration.lower() == 'enable':
-            if enabled:
-                return await main_msg.edit(embed=error_embed(
-                    f"{EMOJIS['twitch']} Already enabled!",
-                    f"The twitch messages are already enabled!\nTo edit them use `{prefix}twitch`"
-                ))
-            await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Please enter the streamer name.",
-                "Make sure to enter the correct username."
-            ))
-            msg_streamer = await self.wait_for_msg(ctx, 60, main_msg)
-            if msg_streamer == 'pain':
-                return
-            twitch_config.update({"username": msg_streamer.content.lower()})
-            await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Please enter the channel.",
-                "Enter the channel where you want the live notification to go."
-            ))
-            msg_channel = await self.wait_for_msg(ctx, 60, main_msg)
-            if msg_channel == 'pain':
-                return
-            try:
-                c_id = int(msg_channel.content[2:-1])
-            except Exception:
-                ctx.command.reset_cooldown(ctx)
-                return await ctx.send(embed=error_embed(
-                    f"{EMOJIS['tick_no']} Invalid Channel!",
-                    f"Please mention a channel properly, like this: {ctx.channel.mention}.\nPlease run the command again."
-                ))
-            channel = discord.utils.get(ctx.guild.channels, id=c_id)
-            if channel is None:
-                ctx.command.reset_cooldown(ctx)
-                return await ctx.send(embed=error_embed(
-                    f"{EMOJIS['tick_no']} Channel Not Found!",
-                    f"I wasn't able to find this channel: {msg_channel.content} please try again."
-                ))
-            twitch_config.update({"channel_id": c_id})
-            return await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Twitch notifications setup!",
-                f"The twitch notifications have been set to channel {channel.mention}.\nTo edit the live message you can use `{prefix}twitch message`"
-            ))
-        elif configuration.lower() == 'disable':
-            if not enabled:
-                return await main_msg.edit(embed=not_enabled_embed)
-            twitch_config.update({
-                "channel_id": None,
-                "username": None,
-                "message": None,
-                "currently_live": False
-            })
-            return await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Disabled!",
-                "The twitch live notifications have been disabled!"
-            ))
-        elif configuration.lower() == 'message':
-            if not enabled:
-                return await main_msg.edit(embed=not_enabled_embed)
-            await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Edit live message!",
-                "Please enter a message.\n\nHere are the tags that you can use:\n\n`{streamer}` - The username of the streamer.\n`{url}` - The twitch link to the stream."
-            ))
-            msg = await self.wait_for_msg(ctx, 60, main_msg)
-            if msg == 'pain':
-                return
-            twitch_config.update({"message": msg.content})
-            return await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Live message updated!",
-                "The twitch live message has been updated!"
-            ))
-        elif configuration.lower() == 'channel':
-            if not enabled:
-                return await main_msg.edit(embed=not_enabled_embed)
-            await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Edit live channel!",
-                "Please enter a channel."
-            ))
-            msg = await self.wait_for_msg(ctx, 60, main_msg)
-            if msg == 'pain':
-                return
-            try:
-                c_id = int(msg.content[2:-1])
-            except Exception:
-                ctx.command.reset_cooldown(ctx)
-                return await ctx.send(embed=error_embed(
-                    f"{EMOJIS['tick_no']} Invalid Channel!",
-                    f"Please mention a channel properly, like this: {ctx.channel.mention}.\nPlease run the command again."
-                ))
-            channel = discord.utils.get(ctx.guild.channels, id=c_id)
-            if channel is None:
-                ctx.command.reset_cooldown(ctx)
-                return await ctx.send(embed=error_embed(
-                    f"{EMOJIS['tick_no']} Channel Not Found!",
-                    f"I wasn't able to find this channel: {msg.content} please try again."
-                ))
-            twitch_config.update({"channel_id": c_id})
-            return await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Live Channel updated!",
-                f"The live channel has successfully been updated to: <#{c_id}>"
-            ))
-        elif configuration.lower() == 'streamer':
-            if not enabled:
-                return await main_msg.edit(embed=not_enabled_embed)
-            await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Edit streamer name!",
-                "Please enter a streamer name."
-            ))
-            msg = await self.wait_for_msg(ctx, 60, main_msg)
-            if msg == 'pain':
-                return
-            content = msg.content
-            twitch_config.update({"username": content.lower()})
-            return await main_msg.edit(embed=success_embed(
-                f"{EMOJIS['twitch']} Username updated!",
-                f"Twitch username has successfully been updated to: `{content}`"
-            ))
-        else:
-            ctx.command.reset_cooldown(ctx)
-            return await main_msg.edit(embed=error_embed(
-                f"{EMOJIS['tick_no']} Invalid option!",
-                f"Please use `{prefix}twitch` to see all the available options!"
-            ))
-
-    @commands.has_permissions(manage_guild=True)
-    @commands.cooldown(3, 30, commands.BucketType.user)
     @commands.command(help="Configure leveling system for your server!")
     async def leveling(self, ctx: commands.Context, configuration=None, choice=None, level=None, role: discord.Role = None):
         guild_config = await self.client.get_guild_config(ctx.guild.id)
@@ -2298,7 +2211,7 @@ Logging is currently {'set in ' if log_chan is not None else ''}**{EMOJIS['tick_
     @commands.cooldown(3, 120, commands.BucketType.guild)
     async def ticket(self, ctx: commands.Context, option: t.Union[discord.TextChannel, str] = None, *, setting: t.Union[discord.Role, str] = None):
 
-        if 'PRIVATE_THREADS' not in ctx.guild.features or 'THREADS_ENABLED' not in ctx.guild.features:
+        if 'PRIVATE_THREADS' not in ctx.guild.features:
             return await ctx.reply(f"{EMOJIS['tick_no']}Unfortunately, private threads are not enabled in your server...\nYou cannot use this command without `PRIVATE_THREADS`")
 
         async def please_enable():
@@ -2366,13 +2279,13 @@ Ticket roles: {t_roles if len(t_roles) != 0 else 'No roles.'}
             t_overwrites = {
                 ctx.guild.me: discord.PermissionOverwrite(
                     send_messages=True,
-                    use_threads=True,
-                    use_private_threads=True
+                    create_public_threads=True,
+                    create_private_threads=True
                 ),
                 ctx.guild.default_role: discord.PermissionOverwrite(
                     send_messages=False,
-                    use_threads=False,
-                    use_private_threads=True
+                    create_public_threads=False,
+                    create_private_threads=True
                 )
             }
             if m.content.lower() == 'create':
@@ -2649,12 +2562,12 @@ Counting is currently **{'Disabled' if not enabled else 'set in <#'+str(g['count
         g['counting'].update({"count": number})
         return await ctx.reply(f"The count has been updated: `{before_count}` ➜ `{number}`")
 
-    @commands.command(help="Setup server counters!")
-    @commands.has_permissions(manage_guild=True, manage_channels=True)
-    @commands.bot_has_permissions(manage_channels=True, manage_messages=True)
-    @commands.cooldown(3, 30, commands.BucketType.guild)
-    async def counters(self, ctx: commands.Context):
-        pass
+    # @commands.command(help="Setup server counters!")
+    # @commands.has_permissions(manage_guild=True, manage_channels=True)
+    # @commands.bot_has_permissions(manage_channels=True, manage_messages=True)
+    # @commands.cooldown(3, 30, commands.BucketType.guild)
+    # async def counters(self, ctx: commands.Context):
+    #     pass
 
     @commands.command(help="Configure automod for your server!", aliases=['am'])
     @commands.has_permissions(administrator=True)
@@ -2802,9 +2715,9 @@ Counting is currently **{'Disabled' if not enabled else 'set in <#'+str(g['count
                     f"Users in channel {other.mention} will now trigger automod."
                 ))
         if module.lower() == 'links':
-            return await ctx.reply("soon")
+            return await ctx.reply("This is work in progress!")
         if module.lower() == 'badwords':
-            return await ctx.reply("soon")
+            return await ctx.reply("This is work in progress!")
         if setting is None:
             return await ctx.reply(embed=error_embed(
                 f"{EMOJIS['tick_no']} Incorrect Usage!",

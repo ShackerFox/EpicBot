@@ -16,7 +16,7 @@ limitations under the License.
 
 import discord
 import time
-import datetime
+import humanfriendly
 
 from utils.embed import error_embed, success_embed
 from discord.ext import commands
@@ -57,7 +57,7 @@ Database : {round((db_time2-db_time1)*1000)}ms
 {shard_text}
 ```
             """
-        ).set_thumbnail(url=self.client.user.avatar.url)
+        ).set_thumbnail(url=self.client.user.display_avatar.url)
         await msg.edit(embed=embed)
 
     @commands.cooldown(1, 2, commands.BucketType.user)
@@ -67,7 +67,7 @@ Database : {round((db_time2-db_time1)*1000)}ms
             title="Invite EpicBot \💖",
             description="Thank you so much!",
             color=MAIN_COLOR,
-            url=f"{WEBSITE_LINK}/beta"
+            url=f"https://discord.com/oauth2/authorize?client_id={self.client.user.id}&permissions=8&scope=bot%20applications.commands"
         ).set_footer(text="UwU"))
 
     @commands.cooldown(1, 2, commands.BucketType.user)
@@ -90,7 +90,7 @@ Database : {round((db_time2-db_time1)*1000)}ms
     async def uptime(self, ctx):
         await ctx.message.reply(embed=discord.Embed(
             title="Uptime",
-            description=f"I have been up for **{str(datetime.timedelta(seconds=int(round(time.time()-start_time))))}**",
+            description=f"I have been up for **{humanfriendly.format_timespan(round(time.time()-start_time))}**",
             color=MAIN_COLOR
         ))
 
@@ -104,7 +104,7 @@ Database : {round((db_time2-db_time1)*1000)}ms
             title="Credits",
             description="This bot wouldn't have been possible without them!",
             color=MAIN_COLOR
-        ).set_thumbnail(url=self.client.user.avatar.url).add_field(
+        ).set_thumbnail(url=self.client.user.display_avatar.url).add_field(
             name="Owner",
             value="- [`Nirlep_5252_`](https://github.com/Nirlep5252)",
             inline=False
@@ -146,7 +146,7 @@ Database : {round((db_time2-db_time1)*1000)}ms
             files.append(await file.to_file())
 
         embed = success_embed("Suggestion!", suggestion
-                ).set_author(name=ctx.author, icon_url=ctx.author.avatar.url
+                ).set_author(name=ctx.author, icon_url=ctx.author.display_avatar.url
                 ).set_footer(text=f"User ID: {ctx.author.id} | Guild ID: {ctx.guild.id}")
 
         msg = await self.client.get_channel(SUGGESTION_CHANNEL).send(embed=embed, files=files)
@@ -175,7 +175,7 @@ Database : {round((db_time2-db_time1)*1000)}ms
             """,
             color=MAIN_COLOR
         )
-        embed.set_author(name=ctx.author, icon_url=ctx.author.avatar.url)
+        embed.set_author(name=ctx.author, icon_url=ctx.author.display_avatar.url)
         embed.set_footer(text=f"User ID: {ctx.author.id} | Guild ID: {ctx.guild.id}")
         await self.client.get_channel(BUG_REPORT_CHANNEL).send(embed=embed)
         await ctx.reply(embed=success_embed(

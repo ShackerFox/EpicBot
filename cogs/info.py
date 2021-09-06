@@ -14,20 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from utils.time import datetime_to_seconds
 import discord
 import time
 import datetime
-import psutil
 from discord.utils import escape_markdown
 from discord.ext import commands
 
 from config import (
-    MAIN_COLOR, ORANGE_COLOR,
+    EMOJIS_FOR_COGS, MAIN_COLOR, ORANGE_COLOR,
     EMOJIS, WEBSITE_LINK, SUPPORT_SERVER_LINK,
     INVITE_BOT_LINK, start_time
 )
 from utils.embed import error_embed
 from utils.bot import EpicBot
+from typing import Optional, Union
 
 
 class info(commands.Cog, description="Statistic related commands"):
@@ -158,12 +159,11 @@ Members: {len(role.members)}
 
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.command(help="Get info about users!")
-    async def userinfo(self, ctx: commands.Context, user: discord.Member = None):
-        if user is None:
-            user = ctx.author
+    async def userinfo(self, ctx: commands.Context, user: Optional[Union[discord.Member, discord.User]] = None):
+        user = user or ctx.author
 
         embed = discord.Embed(color=user.color)
-        embed.set_author(name=user, icon_url=user.avatar.url)
+        embed.set_author(name=user, icon_url=user.display_avatar.url)
         embed.add_field(
             name="Basic Info",
             value=f"""
@@ -180,7 +180,7 @@ ID: {user.id}
             value=f"""
 ```yaml
 Created At: {user.created_at.replace(tzinfo=None).strftime("%d/%m/%y | %H:%M:%S")}
-Joined At: {user.joined_at.replace(tzinfo=None).strftime("%d/%m/%y | %H:%M:%S")}
+Joined At: {"Not in server" if isinstance(user, discord.User) else user.joined_at.replace(tzinfo=None).strftime("%d/%m/%y | %H:%M:%S")}
 ```
             """,
             inline=False
@@ -188,111 +188,100 @@ Joined At: {user.joined_at.replace(tzinfo=None).strftime("%d/%m/%y | %H:%M:%S")}
 
         roles = ""
 
-        for role in user.roles[::-1]:
-            if len(roles) > 500:
-                roles += "and more roles..."
-                break
-            if str(role) != "@everyone":
-                roles += f"{role.mention}, "
+        if isinstance(user, discord.Member):
+            for role in user.roles[::-1]:
+                if len(roles) > 500:
+                    roles += "and more roles..."
+                    break
+                if str(role) != "@everyone":
+                    roles += f"{role.mention}, "
 
-        if len(roles) == 0:
-            roles = "No roles."
+            if len(roles) == 0:
+                roles = "No roles."
 
-        embed.add_field(
-            name="Roles",
-            value=roles,
-            inline=False
-        )
+            embed.add_field(
+                name="Roles",
+                value=roles,
+                inline=False
+            )
 
-        embed.set_thumbnail(url=user.avatar.url)
+        embed.set_thumbnail(url=user.display_avatar.url)
 
         await ctx.reply(embed=embed)
 
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.command(help="Get info about the server!")
     async def serverinfo(self, ctx: commands.Context):
-        embed = discord.Embed(description=f"[Server Icon]({ctx.guild.icon.url})", color=MAIN_COLOR)
-        embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url)
-        embed.set_thumbnail(url=ctx.guild.icon.url)
+        guild: discord.Guild = ctx.guild
+        embed = discord.Embed(
+            title=f"{EMOJIS_FOR_COGS['info']} Server Information",
+            description=f"Description: {guild.description}",
+            color=MAIN_COLOR
+        ).set_author(
+            name=guild.name,
+            icon_url=guild.me.display_avatar.url if guild.icon is None else guild.icon.url
+        ).set_footer(text=f"ID: {guild.id}")
+        if guild.icon is not None:
+            embed.set_thumbnail(url=guild.icon.url)
+        embed.add_field(
+            name="Basic Info:",
+            value=f"""
+**Owner:** <@{guild.owner_id}>
+**Created At:** <t:{round(time.time() - (datetime_to_seconds(guild.created_at) - time.time()))}:F>
+**Region:** {str(guild.region).title()}
+**System Channel:** {"None" if guild.system_channel is None else guild.system_channel.mention}
+**Verification Level:** {str(guild.verification_level).title()}
+            """,
+            inline=False
+        )
+        embed.add_field(
+            name="Members Info:",
+            value=f"""
+**Members:** `{len(guild.members)}`
+**Humans:** `{len(list(filter(lambda m: not m.bot, guild.members)))}`
+**Bots:** `{len(list(filter(lambda m: m.bot, guild.members)))}`
+            """,
+            inline=True
+        )
+        embed.add_field(
+            name="Channels Info:",
+            value=f"""
+**Categories:** `{len(guild.categories)}`
+**Text Channels:** `{len(guild.text_channels)}`
+**Voice Channels:** `{len(guild.voice_channels)}`
+**Threads:** `{len(guild.threads)}`
+            """,
+            inline=True
+        )
+        embed.add_field(
+            name="Other Info:",
+            value=f"""
+**Roles:** `{len(guild.roles)}`
+**Emojis:** `{len(guild.emojis)}`
+**Stickers:** `{len(guild.stickers)}`
+                """
+        )
+        if guild.features:
+            embed.add_field(
+                name="Features:",
+                value=', '.join([feature.replace('_', ' ').title() for feature in guild.features]),
+                inline=False
+            )
+        if guild.banner is not None:
+            embed.set_image(url=guild.banner.url)
 
-        try:
-            rules_channel = ctx.guild.rules_channel
-            moderation_level = str(ctx.guild.verification_level).title()
-            invites = len(await ctx.guild.invites())
-            afk_channel = ctx.guild.afk_channel
-            afk_timeout = ctx.guild.afk_timeout
-        except Exception:
-            rules_channel = 'Not Enough Perms'
-            moderation_level = 'Not Enough Perms'
-            invites = 'Not Enough Perms'
-            afk_channel = 'Not Enough Perms'
-            afk_timeout = 'Not Enough Perms'
-
-        embed.add_field(
-            name="Basic Info",
-            value=f"""
-```yaml
-Server Name: {ctx.guild.name}
-ID: {ctx.guild.id}
-Owner: {ctx.guild.owner}
-Region: {str(ctx.guild.region).title()}
-Moderation Level: {moderation_level}
-Created At: {ctx.guild.created_at.replace(tzinfo=None).strftime("%d/%m/%y | %H:%M:%S")}
-```
-            """,
-            inline=False
-        )
-        embed.add_field(
-            name="Members Info",
-            value=f"""
-```yaml
-Members: {len(ctx.guild.members)}
-Humans: {len(list(filter(lambda m: not m.bot, ctx.guild.members)))}
-Bots: {len(list(filter(lambda m: m.bot, ctx.guild.members)))}
-```
-            """,
-            inline=False
-        )
-        embed.add_field(
-            name="Channels Info",
-            value=f"""
-```yaml
-Text Channels: {len(ctx.guild.text_channels)}
-Voice Channels: {len(ctx.guild.voice_channels)}
-Rules Channel: {rules_channel}
-AFK Channel: {afk_channel}
-AFK Timeout: {afk_timeout}s
-```
-            """,
-            inline=False
-        )
-        embed.add_field(
-            name="Other Info",
-            value=f"""
-```yaml
-Invites: {invites}
-Roles: {len(ctx.guild.roles)}
-Emojis: {len(ctx.guild.emojis)}
-Server Boosts: {ctx.guild.premium_subscription_count}
-```
-            """,
-            inline=False
-        )
-
-        await ctx.message.reply(embed=embed)
+        return await ctx.reply(embed=embed)
 
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.command(aliases=['av', 'pfp'], help="Get the user's avatar")
-    async def avatar(self, ctx, user: discord.User = None):
-        if user is None:
-            user = ctx.author
+    async def avatar(self, ctx: commands.Context, user: Optional[Union[discord.Member, discord.User]] = None):
+        user = user or ctx.author
         embed = discord.Embed(
             title=f"Avatar of {escape_markdown(str(user))}",
-            color=user.color
-        ).set_image(url=user.avatar.url)
+            color=user.color,
+            description=f'Link as: [`png`]({user.display_avatar.replace(format="png").url}) | [`jpg`]({user.display_avatar.replace(format="jpg").url}) | [`webp`]({user.display_avatar.replace(format="webp").url})'
+        ).set_image(url=user.display_avatar.url)
         await ctx.message.reply(embed=embed)
-
-    # fuck statcord
 
     @commands.cooldown(1, 60, commands.BucketType.user)
     @commands.command(aliases=['stats'], help="Get info about me!")
@@ -302,7 +291,7 @@ Server Boosts: {ctx.guild.premium_subscription_count}
             title="Information About Me!",
             description="I am a simple, multipurpose Discord bot, built to make ur Discord life easier!",
             color=MAIN_COLOR
-        ).set_thumbnail(url=self.client.user.avatar.url)
+        ).set_thumbnail(url=self.client.user.display_avatar.url)
         embed.add_field(
             name="Stats",
             value=f"""
@@ -311,26 +300,26 @@ Servers: {len(self.client.guilds)}
 Users: {len(set(self.client.get_all_members()))}
 Total Commands: {len(self.client.commands)}
 Uptime: {str(datetime.timedelta(seconds=int(round(time.time()-start_time))))}
-Version: V2 Beta
+Version: V2 Rewrite
 ```
             """,
             inline=False
         )
-        async with self.client.session.get("https://statcord.com/logan/stats/751100444188737617") as r:
-            ah_yes = await r.json()
-        embed.add_field(
-            name="Statcord Stats",
-            value=f"""
-```yaml
-Commands Ran Today: {ah_yes['data'][::-1][0]['commands']}
-Most Used Command: {ah_yes['data'][::-1][0]['popular'][0]['name']} - {ah_yes['data'][::-1][0]['popular'][0]['count']} uses
-Memory Usage: {'%.1f' % float(int(ah_yes['data'][::-1][0]['memactive'])/1000000000)} GB / {'%.1f' % float(int(psutil.virtual_memory().total)/1000000000)} GB
-Memory Load: {ah_yes['data'][::-1][0]['memload']}%
-CPU Load: {ah_yes['data'][::-1][0]['cpuload']}%
-```
-            """,
-            inline=False
-        )
+#         async with self.client.session.get("https://statcord.com/logan/stats/751100444188737617") as r:
+#             ah_yes = await r.json()
+#         embed.add_field(
+#             name="Statcord Stats",
+#             value=f"""
+# ```yaml
+# Commands Ran Today: {ah_yes['data'][::-1][0]['commands']}
+# Most Used Command: {ah_yes['data'][::-1][0]['popular'][0]['name']} - {ah_yes['data'][::-1][0]['popular'][0]['count']} uses
+# Memory Usage: {'%.1f' % float(int(ah_yes['data'][::-1][0]['memactive'])/1000000000)} GB / {'%.1f' % float(int(psutil.virtual_memory().total)/1000000000)} GB
+# Memory Load: {ah_yes['data'][::-1][0]['memload']}%
+# CPU Load: {ah_yes['data'][::-1][0]['cpuload']}%
+# ```
+#             """,
+#             inline=False
+#         )
         embed.add_field(
             name="Links",
             value=f"""

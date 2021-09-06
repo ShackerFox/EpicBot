@@ -18,15 +18,18 @@ import time
 import os
 
 # LOL TOKEN GO BRR
-BOT_TOKEN = os.environ.get("TOKEN")
-MONGO_DB_URL = os.environ.get("MONGO")
-DB_UPDATE_INTERVAL = 60
-PREFIX = "e/"
-OWNERS = [558861606063308822]
-COOLDOWN_BYPASS = [558861606063308822, 344313283714613248]
-EPICBOT_GUILD_ID = 746202728031584358
+BOT_TOKEN = os.environ.get("TOKEN")  # your discord bot token
+BOT_TOKEN_BETA = os.environ.get("TOKEN_BETA")  # the token of the beta bot (optional)
 
-PREMIUM_GUILDS = [746202728031584358, 749996055369875456]
+MONGO_DB_URL = os.environ.get("MONGO")  # your mongodb database connection url string
+MONGO_DB_URL_BETA = os.environ.get("MONGO_BETA")  # database for the beta bot (optional)
+DB_UPDATE_INTERVAL = 60  # the interval at which the database is updated
+
+PREFIX = "e!"  # the default prefix for the bot
+OWNERS = [558861606063308822]  # the bot owners
+COOLDOWN_BYPASS = [558861606063308822, 344313283714613248, 679677267164921866]  # the users that bypass the cooldown
+EPICBOT_GUILD_ID = 746202728031584358  # the id of the epicbot guild
+PREMIUM_GUILDS = [746202728031584358, 749996055369875456]  # the ids of the premium guilds (it bypasses some cmd requirements)
 
 # AFK KEYS
 
@@ -37,20 +40,34 @@ TWITCH_CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID")
 TWITCH_CLIENT_SECRET = os.environ.get("TWITCH_CLIENT_SECRET")
 CHAT_BID = os.environ.get("CHAT_BID")
 CHAT_API_KEY = os.environ.get("CHAT_API_KEY")
+DAGPI_KEY = os.environ.get("DAGPI_KEY")
+STATCORD_KEY = os.environ.get("STATCORD_KEY")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 
 # SECRET LOGS HEHE :3
 
-ONLINE_LOG_CHANNEL = 832645093080039466
+ONLINE_LOG_CHANNEL = 757168151141285929
 SHARD_LOG_CHANNEL = 832645114459324507
-ADD_REMOVE_LOG_CHANNEL = 832645168578560031
+ADD_REMOVE_LOG_CHANNEL = 793832499645644800
 DATABASE_LOG_CHANNEL = 832645226799300609
-COMMANDS_LOG_CHANNEL = 832645132117082203
+COMMANDS_LOG_CHANNEL = 775949886842994698
 ERROR_LOG_CHANNEL = 832645286098239488
-DM_LOG_CHANNEL = 832645270365667328
+DM_LOG_CHANNEL = 793482521076695070
 BUG_REPORT_CHANNEL = 834665587010568252
 RANK_CARD_SUBMIT_CHANNEL = 856512113580703814
 SUGGESTION_CHANNEL = 746202728648146986
 USER_REPORT_CHANNEL = 863768592159473694
+
+# WEBHOOK LOGS
+
+WEBHOOKS = {
+    "startup": (880847339378573403, os.environ.get("startup_webhook")),
+    "add_remove": (880847516537585734, os.environ.get("add_remove_webhook")),
+    "cmd_uses": (880847705809760276, os.environ.get("cmd_uses_webhook")),
+    "cmd_error": (880846787349446778, os.environ.get("cmd_error_webhook")),
+    "event_error": (880844779565506601, os.environ.get("event_error_webhook")),
+}
+
 # COLORS
 
 # MAIN_COLOR = 0xDC143C # crimson
@@ -167,6 +184,7 @@ EMOJIS_FOR_COGS = {
     'starboard': '⭐',
     'utility': '🔧',
     'user': '<:EpicMembers:794075799422238720>',
+    'notifications': '<:notif:883324701181620304>'
 }
 CUTE_EMOJIS = [
     "<:shy:844039614032904222>",
@@ -183,18 +201,28 @@ CUTE_EMOJIS = [
     "<:thanks:800741855805046815>",
     "<a:hugs:839739273083224104>"
 ]
+THINKING_EMOJI_URLS = [
+    'https://cdn.discordapp.com/emojis/862387505852055602.png',
+    'https://cdn.discordapp.com/emojis/768302864685727755.png',
+    'https://cdn.discordapp.com/emojis/854206416830988318.png',
+    'https://cdn.discordapp.com/emojis/853192295277002752.png',
+    'https://cdn.discordapp.com/emojis/585956493392871424.png',
+    'https://cdn.discordapp.com/emojis/819207595876417546.png'
+]
 
 # CREDITS
 
 CREDITS_CONTRIBUTORS = {
-    "TheUndeadBowman": ["TheUndeadBowman", "Supporter, Helper"],
+    "Mr Potato": ["MrPotato374", "Staff, Supporter, Helper"],
+    "ELEXR": ["ELEXR", "Supporter, Helper"],
+    "Sengolda": ["Sengolda", "Helper"],
+    "TheUndeadBowman": ["TheUndeadBowman", "Staff, Supporter, Helper"],
     "CAT": ["KittyKart", "Supporter, Helper"],
     "Vishal": ["imkrvishal", "Helper"],
     "Crafterzman": ["Craftzman7", "Helper"],
     "Motzumoto": ["Motzumoto", "Helper"],
     "Windows": ["WindowsCmd", "Helper"],
     "Nek": ["NekWasTaken", "Helper"],
-    "ELEXR": ["ELEXR", "Supporter, Helper"]
 }
 
 # PP

@@ -56,7 +56,7 @@ class Starboard(commands.Cog):
             description=msg.content or EMPTY_CHARACTER,
             color=STARBOARD_COLOR,
             timestamp=datetime.utcnow()
-        ).set_author(name=msg.author, icon_url=msg.author.avatar.url, url=msg.jump_url
+        ).set_author(name=msg.author, icon_url=msg.author.display_avatar.url, url=msg.jump_url
         ).set_footer(text=f"Message ID: {msg.id}"
         )
 
@@ -69,6 +69,14 @@ class Starboard(commands.Cog):
             atch_text += f"**[{file.filename}]({file.url})**\n"
         if atch_text != "":
             embed.add_field(name="Attachments:", value=atch_text, inline=False)
+
+        for sticker in msg.stickers:
+            embed.add_field(
+                name=f"Sticker: `{sticker.name}`",
+                value=f"ID: [`{sticker.id}`]({sticker.url})"
+            )
+        if len(msg.stickers) == 1:
+            embed.set_thumbnail(url=msg.stickers[0].url)
 
         embed.add_field(name="Original message:", value=f"[**Click to jump to message!**]({msg.jump_url})")
 
@@ -127,7 +135,7 @@ class Starboard(commands.Cog):
             description=msg.content or EMPTY_CHARACTER,
             color=STARBOARD_COLOR,
             timestamp=datetime.utcnow()
-        ).set_author(name=msg.author, icon_url=msg.author.avatar.url, url=msg.jump_url
+        ).set_author(name=msg.author, icon_url=msg.author.display_avatar.url, url=msg.jump_url
         ).set_footer(text=f"Message ID: {msg.id}"
         )
 
@@ -140,6 +148,14 @@ class Starboard(commands.Cog):
             atch_text += f"**[{file.filename}]({file.url})**\n"
         if atch_text != "":
             embed.add_field(name="Attachments:", value=atch_text, inline=False)
+
+        for sticker in msg.stickers:
+            embed.add_field(
+                name=f"Sticker: `{sticker.name}`",
+                value=f"ID: [`{sticker.id}`]({sticker.url})"
+            )
+        if len(msg.stickers) == 1:
+            embed.set_thumbnail(url=msg.stickers[0].url)
 
         embed.add_field(name="Original message:", value=f"[**Click to jump to message!**]({msg.jump_url})")
 

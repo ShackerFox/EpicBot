@@ -20,23 +20,37 @@ import os
 import re
 import discord
 import aiohttp
+import sys
+import traceback
 
 from config import (
-    MONGO_DB_URL, DEFAULT_AUTOMOD_CONFIG,
-    DB_UPDATE_INTERVAL, ONLINE_LOG_CHANNEL
+    MONGO_DB_URL, MONGO_DB_URL_BETA, DEFAULT_AUTOMOD_CONFIG,
+    DB_UPDATE_INTERVAL, RED_COLOR, EMOJIS
 )
-from utils.embed import success_embed
 from discord.ext import commands, tasks
 from pymongo import UpdateOne
-
-
-cluster = motor.AsyncIOMotorClient(MONGO_DB_URL)
+from utils.embed import success_embed
+from utils.ui import TicketView, DropDownSelfRoleView, ButtonSelfRoleView
+from utils.help import EpicBotHelp
 
 
 class EpicBot(commands.AutoShardedBot):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+    def __init__(self, beta: bool = False):
+        self.beta = beta
+        intents = discord.Intents.default()
+        intents.members = True
+        super().__init__(
+            command_prefix=EpicBot.get_custom_prefix,
+            intents=intents,
+            case_insensitive=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+            strip_after_prefix=True,
+            help_command=EpicBotHelp(),
+            cached_messages=10000,
+            activity=discord.Activity(type=discord.ActivityType.playing, name="e!help | epic-bot.com" if not beta else "nirlep is doing some weird shit rn"),
+            shard_count=2  # remove this if your bot is under 1000 servers
+        )
+        cluster = motor.AsyncIOMotorClient(MONGO_DB_URL if not beta else MONGO_DB_URL_BETA)
         self.session = aiohttp.ClientSession()
         self.cache_loaded = False
         self.cogs_loaded = False
@@ -64,6 +78,7 @@ class EpicBot(commands.AutoShardedBot):
         self.bookmarks = self.db['bookmarks']
         self.self_roles = self.db['self_roles']
 
+        # i'm gonna fill these up with my cu- i mean cache!
         self.prefixes_cache = []
         self.blacklisted_cache = []
         self.serverconfig_cache = []
@@ -77,6 +92,18 @@ class EpicBot(commands.AutoShardedBot):
         self.update_serverconfig_db.start()
         self.update_leveling_db.start()
         self.update_user_profile_db.start()
+
+        if not self.cache_loaded:
+            self.loop.run_until_complete(self.get_cache())
+            self.loop.run_until_complete(self.get_blacklisted_users())
+            self.cache_loaded = True
+
+        if not self.cogs_loaded:
+            self.load_extension('jishaku')
+            print("Loaded jsk!")
+            self.loaded, self.not_loaded = self.loop.run_until_complete(self.load_extensions('./cogs'))
+            self.loaded_hidden, self.not_loaded_hidden = self.loop.run_until_complete(self.load_extensions('./cogs_hidden'))
+            self.cogs_loaded = True
 
     async def set_default_guild_config(self, guild_id):
         pain = {
@@ -356,8 +383,9 @@ class EpicBot(commands.AutoShardedBot):
                     {"_id": eee['_id']},
                     {"$set": {
                         "disabled_cmds": eee['disabled_cmds'],
-                        "disabled_channels": [] if "disabled_channels" not in eee else eee['disabled_channels'],
-                        "custom_cmds": eee['custom_cmds'] if 'custom_cmds' in eee else [],
+                        "disabled_channels": eee.get('disabled_channels', []),
+                        "disabled_categories": eee.get('disabled_categories', []),
+                        "custom_cmds": eee.get("custom_cmds", []),
                         "welcome": eee['welcome'],
                         "leave": eee['leave'],
                         "autorole": eee['autorole'],
@@ -367,15 +395,15 @@ class EpicBot(commands.AutoShardedBot):
                         "youtube": eee['youtube'],
                         "twitch": eee['twitch'],
                         "starboard": eee['starboard'],
-                        "logging": None if "logging" not in eee else eee['logging'],
-                        "chatbot": None if "chatbot" not in eee else eee['chatbot'],
-                        "automod": DEFAULT_AUTOMOD_CONFIG if "automod" not in eee else eee['automod'],
-                        "ghost_ping": False if "ghost_ping" not in eee else eee['ghost_ping'],
-                        "bump_reminders": False if "bump_reminders" not in eee else eee['bump_reminders'],
-                        "antialts": False if "antialts" not in eee else eee['antialts'],
-                        "globalchat": False if "globalchat" not in eee else eee['globalchat'],
-                        "counting": None if "counting" not in eee else eee['counting'],
-                        "antihoisting": False if "antihoisting" not in eee else eee['antihoisting'],
+                        "logging": eee.get("logging", None),
+                        "chatbot": eee.get("chatbot", None),
+                        "automod": eee.get("automod", DEFAULT_AUTOMOD_CONFIG),
+                        "ghost_ping": eee.get("ghost_ping", False),
+                        "bump_reminders": eee.get("bump_reminders", False),
+                        "antialts": eee.get("antialts", False),
+                        "globalchat": eee.get("globalchat", False),
+                        "counting": eee.get("counting", None),
+                        "antihoisting": eee.get("antihoisting", False),
                         "tickets": {"message_id": None, "channel": None, "roles": []} if "tickets" not in eee else eee['tickets'],
                         "counters": {"members": None, "huamns": None, "bots": None, "channels": None, "categories": None, "roles": None, "emojis": None} if "counters" not in eee else eee['counters']
                     }},
@@ -438,49 +466,50 @@ class EpicBot(commands.AutoShardedBot):
     async def get_cache(self):
         cursor = self.prefixes.find({})
         self.prefixes_cache = await cursor.to_list(length=None)
-        print("Prefixes cache has been loaded.")
+        print(f"Prefixes cache has been loaded. | {len(self.prefixes_cache)} items")
 
         cursor = self.serverconfig.find({})
         self.serverconfig_cache = await cursor.to_list(length=None)
-        print("Server config cache has been loaded.")
+        print(f"Server config cache has been loaded. | {len(self.serverconfig_cache)} configs")
 
         cursor = self.reminders_db.find({})
         self.reminders = await cursor.to_list(length=None)
-        print("Reminders cache has been loaded.")
+        print(f"Reminders cache has been loaded. | {len(self.reminders)} reminders")
 
         cursor = self.leveling_db.find({})
         self.leveling_cache = await cursor.to_list(length=None)
-        print("Leveling cache has been loaded.")
+        print(f"Leveling cache has been loaded. | {len(self.leveling_cache)} items")
 
         cursor = self.user_profile_db.find({})
         self.user_profile_cache = await cursor.to_list(length=None)
-        print("User profile cache has been loaded.")
+        print(f"User profile cache has been loaded. | {len(self.user_profile_cache)} profiles")
 
     async def get_blacklisted_users(self):
         cursor = self.blacklisted.find({})
         self.blacklisted_cache = await cursor.to_list(length=None)
-        print("Blacklisted users cache has been loaded.")
+        print(f"Blacklisted users cache has been loaded. | {len(self.blacklisted_cache)} users")
 
     async def load_extensions(self, filename_):
-        await self.wait_until_ready()
-        cogs_text = ""
+        loaded = []
+        not_loaded = {}
         i = 0
         total = 0
         for filename in os.listdir(filename_):
             if filename.endswith('.py'):
                 total += 1
+                h = f'{filename_[2:]}.{filename[:-3]}'
                 try:
-                    self.load_extension(f'{filename_[2:]}.{filename[:-3]}')
-                    cogs_text += f"🟢 Loaded {filename[:-3]}\n"
+                    self.load_extension(h)
+                    loaded.append(h)
                     i += 1
                 except Exception as e:
-                    cogs_text += f"🔴 Unable to load {filename[:-3]} | {e}\n"
-        await self.get_channel(ONLINE_LOG_CHANNEL).send(embed=success_embed("Cogs Loaded", f"```{cogs_text}```"))
+                    not_loaded.update({h: e})
         print(f"Loaded {i}/{total} extensions from {filename_}")
+        return loaded, not_loaded
 
     async def fetch_prefix(self, message: discord.Message):
         if not message.guild:
-            return ["e/"]
+            return ["e!"]
 
         guild_id = message.guild.id
         prefix_cache = self.prefixes_cache
@@ -492,8 +521,8 @@ class EpicBot(commands.AutoShardedBot):
                     ee.update({"prefix": [str_prefix]})
                 return ee['prefix']
 
-        prefix_cache.append({"_id": guild_id, "prefix": ["e/"]})
-        return ["e/"]
+        prefix_cache.append({"_id": guild_id, "prefix": ["e!"]})
+        return ["e!"]
 
     async def get_custom_prefix(self, message: discord.Message):
         prefix = await self.fetch_prefix(message)
@@ -509,3 +538,128 @@ class EpicBot(commands.AutoShardedBot):
         if match is not None:
             return match.group(1)
         return prefix
+
+    async def load_rolemenus(self, dropdown_view, button_view):
+        i = 0
+        cursor = self.self_roles.find({})
+        h = await cursor.to_list(length=None)
+        for amogus in h:
+            guild = self.get_guild(amogus['_id'])
+            if guild is not None:
+                role_menus = amogus['role_menus']
+                for msg_id, menu in role_menus.items():
+                    if menu['type'] == 'dropdown':
+                        self.add_view(dropdown_view(guild, menu['stuff']), message_id=int(msg_id))
+                        i += 1
+                    if menu['type'] == 'button':
+                        self.add_view(button_view(guild, menu['stuff']), message_id=int(msg_id))
+                        i += 1
+        self.rolemenus_loaded = True
+
+        print(f"Self role views has been loaded. | {i} views")
+
+    async def on_error(self, event_method: str, *args, **kwargs) -> None:
+        (exc_type, exc, tb) = sys.exc_info()
+        if isinstance(exc, commands.CommandInvokeError):
+            return
+
+        e = discord.Embed(title="Error in an event", color=RED_COLOR)
+        e.add_field(name="Event", value=event_method)
+        e.description = f"```py\n{''.join(traceback.format_exception(exc_type, exc, tb))}\n```"
+
+        args_str = ['```py']
+        for index, arg in enumerate(args):
+            args_str.append(f'[{index}]: {arg!r}')
+        args_str.append('```')
+        e.add_field(name='Args', value='\n'.join(args_str), inline=False)
+        webhooks = self.get_cog("Webhooks").webhooks
+        webhook = webhooks.get("event_error")
+        try:
+            await webhook.send(embed=e)
+        except Exception:
+            return await super().on_error(event_method, *args, **kwargs)
+
+    async def on_message(self, message: discord.Message):
+        if not self.cache_loaded:
+            return
+        if message.author.bot:
+            return
+        for e in self.blacklisted_cache:
+            if message.author.id == e['_id']:
+                return
+        if message.content.lower() in [f'<@{self.user.id}>', f'<@!{self.user.id}>']:
+            prefixes = await self.fetch_prefix(message)
+            prefix_text = ""
+            for prefix in prefixes:
+                prefix_text += f"`{prefix}`, "
+            prefix_text = prefix_text[:-2]
+            return await message.reply(embed=success_embed(
+                f"{EMOJIS['wave_1']} Hello!",
+                f"My prefix{'es' if len(prefixes) > 1 else ''} for this server {'are' if len(prefixes) > 1 else 'is'}: {prefix_text}"
+            ))
+
+        await self.process_commands(message)
+
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        if before.content == after.content or before.author.bot or not self.cache_loaded or not self.cogs_loaded:
+            return
+        self.dispatch("message", after)
+
+    async def on_ready(self):
+        if not self.views_loaded:
+            self.add_view(TicketView())
+            self.views_loaded = True
+            print("Ticket view has been loaded.")
+
+        if not self.rolemenus_loaded:
+            await self.load_rolemenus(DropDownSelfRoleView, ButtonSelfRoleView)
+
+        print("""
+
+
+         _            _        _           _             _               _          _
+        /\ \         /\ \     /\ \       /\ \           / /\            /\ \       /\ \\
+       /  \ \       /  \ \    \ \ \     /  \ \         / /  \          /  \ \      \_\ \\
+      / /\ \ \     / /\ \ \   /\ \_\   / /\ \ \       / / /\ \        / /\ \ \     /\__ \\
+     / / /\ \_\   / / /\ \_\ / /\/_/  / / /\ \ \     / / /\ \ \      / / /\ \ \   / /_ \ \\
+    / /_/_ \/_/  / / /_/ / // / /    / / /  \ \_\   / / /\ \_\ \    / / /  \ \_\ / / /\ \ \\
+   / /____/\    / / /__\/ // / /    / / /    \/_/  / / /\ \ \___\  / / /   / / // / /  \/_/
+  / /\____\/   / / /_____// / /    / / /          / / /  \ \ \__/ / / /   / / // / /
+ / / /______  / / /   ___/ / /__  / / /________  / / /____\_\ \  / / /___/ / // / /
+/ / /_______\/ / /   /\__\/_/___\/ / /_________\/ / /__________\/ / /____\/ //_/ /
+\/__________/\/_/    \/_________/\/____________/\/_____________/\/_________/ \_\/
+
+
+        """)
+        print(f"Logged in as {self.user}")
+        print(f"Connected to: {len(self.guilds)} guilds")
+        print(f"Connected to: {len(self.users)} users")
+        print(f"Connected to: {len(self.cogs)} cogs")
+        print(f"Connected to: {len(self.commands)} commands")
+        print(f"Connected to: {len(self.emojis)} emojis")
+        print(f"Connected to: {len(self.voice_clients)} voice clients")
+        print(f"Connected to: {len(self.private_channels)} private_channels")
+
+        embed = success_embed(
+            "Bot is ready!",
+            f"""
+    **Loaded cogs:** {len(self.loaded)}/{len(self.loaded) + len(self.not_loaded)}
+    **Loaded hidden cogs:** {len(self.loaded_hidden)}/{len(self.loaded_hidden) + len(self.not_loaded_hidden)}
+            """
+        )
+        if self.not_loaded:
+            embed.add_field(
+                name="Not loaded cogs",
+                value="\n".join([f"`{cog}` - {error}" for cog, error in self.not_loaded.items()]),
+                inline=False
+            )
+        if self.not_loaded_hidden:
+            embed.add_field(
+                name="Not loaded hidden cogs",
+                value="\n".join([f"`{cog}` - {error}" for cog, error in self.not_loaded_hidden.items()]),
+                inline=False
+            )
+        if self.beta:
+            embed.set_footer(text="Beta version.")
+        webhook = self.get_cog("Webhooks").webhooks.get("startup")
+        await webhook.send(embed=embed)

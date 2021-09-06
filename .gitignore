@@ -1,4 +1,7 @@
 __pycache__
 .vscode
+.vs
 .idea
 .metadata
+test.py
+.env

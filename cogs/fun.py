@@ -21,25 +21,57 @@ import pyfiglet
 import functools
 
 from discord.ext import commands
-from typing import Optional, Union
+from typing import Optional, Union, List, Tuple
 from config import (
-    EMOJIS, MAIN_COLOR, BIG_PP_GANG, NO_PP_GANG,
+    DAGPI_KEY, EMOJIS, MAIN_COLOR, BIG_PP_GANG, NO_PP_GANG,
     RED_COLOR, ORANGE_COLOR, PINK_COLOR, CHAT_BID,
-    CHAT_API_KEY, PINK_COLOR_2
+    CHAT_API_KEY, PINK_COLOR_2, THINKING_EMOJI_URLS, WEBSITE_LINK
 )
 from utils.embed import success_embed, error_embed, edit_msg_multiple_times
 from utils.custom_checks import not_opted_out
 from utils.random import email_fun, passwords, DMs, discord_servers
 from utils.reddit import pick_random_url_from_reddit
+from utils.constants import brain_images
+from utils.ui import Paginator
 from owotext import OwO
 from dadjokes import Dadjoke
 from discord.utils import escape_markdown
 from utils.bot import EpicBot
-from epicbot_images import effects
+from epicbot_images.effects import ascii
 from io import BytesIO
 
 uwu = OwO()
 dadjoke = Dadjoke()
+f_channels = {}
+drank_beer = {}
+beer_parties = {}
+
+
+class PressFView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(emoji='🇫')
+    async def press_f_nice(self, button: discord.Button, interaction: discord.Interaction):
+        if interaction.user.id in f_channels[interaction.channel.id]["reacted"]:
+            return await interaction.response.send_message("You have already paid respects!", ephemeral=True)
+        user = interaction.user
+        await interaction.channel.send(f"**{escape_markdown(user.name)}** has paid their respects.")
+        f_channels[interaction.message.channel.id]["reacted"].append(user.id)
+
+
+class BeerView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(emoji='🍻')
+    async def press_beer_nice(self, button: discord.Button, interaction: discord.Interaction):
+        array = drank_beer.get(interaction.message.id)
+        if interaction.user.id in array:
+            return await interaction.response.send_message("Don't drink too much beer!", ephemeral=True)
+        await interaction.channel.send(f"**{escape_markdown(str(interaction.user.name))}** drank beer.")
+        array.append(interaction.user.id)
+        drank_beer.update({interaction.message.id: array})
 
 
 class fun(commands.Cog, description="Wanna have some fun?"):
@@ -50,10 +82,6 @@ class fun(commands.Cog, description="Wanna have some fun?"):
         self.sniped_msgs = {}
         self.edited_msgs = {}
         self.embed_snipes = {}
-
-        self.beer_parties = {}
-        self.drank_beer = {}
-        self.f_channels = {}
 
     @commands.cooldown(1, 86400, commands.BucketType.user)
     @commands.cooldown(1, 120, commands.BucketType.guild)
@@ -104,82 +132,64 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
     @commands.command(help="Pay respects! F", aliases=['press_f', 'pressf'])
     @commands.bot_has_guild_permissions(add_reactions=True)
     @commands.cooldown(1, 10, commands.BucketType.user)
-    async def f(self, ctx):
-        if ctx.channel.id in self.f_channels:
-            msgg = await ctx.channel.fetch_message(int(self.f_channels[ctx.channel.id]['msg_id']))
-            return await ctx.reply(embed=success_embed(
-                "A pay respect event is already active!",
-                f"[Click Here To Go There]({msgg.jump_url})"
-            ))
+    async def f(self, ctx: commands.Context):
+        if ctx.channel.id in f_channels:
+            try:
+                msgg = await ctx.fetch_message(int(f_channels[ctx.channel.id]['msg_id']))
+                return await ctx.reply(embed=success_embed(
+                    "A pay respect event is already active!",
+                    f"[Click Here To Go There]({msgg.jump_url})"
+                ))
+            except discord.NotFound:
+                pass
 
-        msg = await ctx.send("**It's Time To Pay Respects**\n\nLet us all pay respects here!")
-        await msg.add_reaction("🇫")
-        self.f_channels[ctx.channel.id] = {"msg_id": msg.id, "reacted": []}
+        msg = await ctx.send(
+            embed=discord.Embed(color=MAIN_COLOR).set_author(name="It's time to pay respects!", icon_url=ctx.author.display_avatar.url),
+            view=PressFView()
+        )
+        f_channels[ctx.channel.id] = {"msg_id": msg.id, "reacted": []}
         await asyncio.sleep(30)
-        amount = len(self.f_channels[ctx.channel.id]["reacted"])
+        amount = len(f_channels[ctx.channel.id]["reacted"])
         word = "person has" if amount == 1 else "people have"
-        await ctx.send(f"**{amount}** {word} paid respect!")
-        del self.f_channels[ctx.channel.id]
-
-    @commands.Cog.listener('on_reaction_add')
-    async def f_handler(self, reaction, user):
-        if reaction.message.channel.id not in self.f_channels:
-            return
-        if self.f_channels[reaction.message.channel.id]["msg_id"] != reaction.message.id:
-            return
-        if user.id == self.client.user.id:
-            return
-        if reaction.emoji != "🇫":
-            return
-        if user.id not in self.f_channels[reaction.message.channel.id]["reacted"]:
-            await reaction.message.channel.send(f"**{user.name}** has paid their respects.")
-            self.f_channels[reaction.message.channel.id]["reacted"].append(user.id)
+        try:
+            await msg.reply(f"**{amount}** {word} paid respect!")
+            await msg.edit(view=None)
+        except discord.NotFound:
+            pass
+        del f_channels[ctx.channel.id]
 
     @commands.command(help="Start a beer party!", aliases=['beerparty'])
     async def beer(self, ctx: commands.Context):
-        if ctx.guild.id in self.beer_parties:
-            msg = await ctx.fetch_message(self.beer_parties[ctx.guild.id])
-            return await ctx.reply(embed=success_embed(
-                "A beer party is already active",
-                f"[Click here to go to beer party!]({msg.jump_url})"
-            ))
-        msg = await ctx.send(f"🍻  A beer party has been started by: {ctx.author.mention}")
-        await msg.add_reaction('🍻')
-
-        self.beer_parties.update({ctx.guild.id: msg.id})
-        self.drank_beer.update({msg.id: []})
+        if ctx.guild.id in beer_parties:
+            try:
+                msg = await ctx.fetch_message(beer_parties[ctx.guild.id])
+                return await ctx.reply(embed=success_embed(
+                    "A beer party is already active",
+                    f"[Click here to go to beer party!]({msg.jump_url})"
+                ))
+            except discord.NotFound:
+                pass
+        msg = await ctx.send(f"🍻  A beer party has been started by: {ctx.author.mention}", view=BeerView())
+        beer_parties.update({ctx.guild.id: msg.id})
+        drank_beer.update({msg.id: []})
 
         await asyncio.sleep(30)
-        msg = await ctx.channel.fetch_message(msg.id)
-        if len(self.drank_beer.get(msg.id)) == 0:
+        if len(drank_beer.get(msg.id)) == 0:
             pain = f"No one drank beer with {ctx.author.mention}.\nNot even they drank beer."
-        elif len(self.drank_beer.get(msg.id)) == 1:
+        elif len(drank_beer.get(msg.id)) == 1:
             pain = f"No one drank beer with {ctx.author.mention}."
         else:
-            pain = f"A total of **{len(self.drank_beer.get(msg.id)) - 1}** people drank beer with {ctx.author.mention}"
-        await msg.reply(embed=success_embed(
-            "🍻  The beer party ended!",
-            pain
-        ))
-        self.beer_parties.pop(ctx.guild.id)
-        self.drank_beer.pop(msg.id)
-
-    @commands.Cog.listener()
-    async def on_reaction_add(self, reaction: discord.Reaction, user):
-        if user.bot:
-            return
-        if reaction.emoji != '🍻':
-            return
-        if user.guild.id not in self.beer_parties:
-            return
-        if reaction.message.id != self.beer_parties[user.guild.id]:
-            return
-        array = self.drank_beer.get(reaction.message.id)
-        if user.id in array:
-            return
-        await reaction.message.channel.send(f"**{escape_markdown(str(user.name))}** drank beer.")
-        array.append(user.id)
-        self.drank_beer.update({reaction.message.id: array})
+            pain = f"A total of **{len(drank_beer.get(msg.id)) - 1}** people drank beer with {ctx.author.mention}"
+        try:
+            await msg.edit(view=None)
+            await msg.reply(embed=success_embed(
+                "🍻  The beer party ended!",
+                pain
+            ))
+        except discord.NotFound:
+            pass
+        beer_parties.pop(ctx.guild.id)
+        drank_beer.pop(msg.id)
 
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.command(help="Check your PP size!")
@@ -209,14 +219,57 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
             title="Your PP",
             description=pp,
             color=color
-        ).set_author(name=user.name, icon_url=user.avatar.url).set_footer(text=footer)
+        ).set_author(name=user.name, icon_url=user.display_avatar.url).set_footer(text=footer)
 
         await msg.edit(embed=embed)
+
+    @commands.command(help="Check your brain size!", aliases=['brain', 'iq'])
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def brainsize(self, ctx, user: Union[discord.Member, str] = None):
+        user = user or ctx.author
+        if user.id in [521640052195852298, 679677267164921866]:
+            iq = 69420
+        elif user.id == 558861606063308822:
+            iq = 0
+        else:
+            iq = random.randint(0, 200)
+        if iq == 0:
+            color = RED_COLOR
+            footer = "ur brain is just like my life. non existent."
+            size = "no_brain"
+        elif iq in range(1, 50):
+            color = RED_COLOR
+            footer = "lol ur brain is almost the same size as ur pp"
+            size = "small"
+        elif iq in range(50, 100):
+            color = ORANGE_COLOR
+            footer = "damn, how do u manage to be so dumb!"
+            size = "small"
+        elif iq in range(100, 150):
+            color = MAIN_COLOR
+            footer = "damn, pretty smart 👀"
+            size = "medium"
+        elif iq in range(150, 69421):
+            color = MAIN_COLOR
+            footer = "damn ur a genius! not as smart as me though"  # by this i mean epicbot is smart not me, im dumb lol
+            size = "big"
+        embed = discord.Embed(
+            title="🧠 Your IQ",
+            description=f"**{escape_markdown(str(user))}** has an IQ of **{iq}**",
+            color=color
+        ).set_footer(text=footer).set_thumbnail(url=random.choice(brain_images[size]))
+
+        m = await ctx.reply("Calculating IQ...")
+        await asyncio.sleep(0.5)
+        await m.edit(content="", embed=embed)
 
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.command(help="Free Nitro!!!")
     async def freenitro(self, ctx):
-        embed = success_embed("FREE NITRO", "[https://discord.gift/NBnj8bySBWr63Q99](https://discord.gg/Zj7h8Fp)")
+        embed = success_embed(
+            "FREE NITRO",
+            f"Your nitro: [**https://discord.gift/NBnj8bySBWr63Q99**](https://discord.gg/Zj7h8Fp)\n\n*[Disclaimer]({WEBSITE_LINK}/disclaimer)*"
+        ).set_footer(text=f"Requested by: {ctx.author}", icon_url=ctx.author.display_avatar.url)
 
         try:
             await ctx.message.delete()
@@ -320,34 +373,42 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
             else:
                 await ctx.send("**After:**", embed=after[0])
 
-    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def get_sniped_msg_embed(self, channel_id: int, amount: int = 1) -> Tuple[discord.Embed, List[discord.File]]:
+        if amount > len(self.sniped_msgs[channel_id]):
+            raise KeyError
+        thing = self.sniped_msgs[channel_id][len(self.sniped_msgs[channel_id]) - amount]
+
+        embed = discord.Embed(
+            description=thing['content'],
+            color=MAIN_COLOR,
+            timestamp=thing['time']
+        ).set_author(name=thing['author'].name, icon_url=thing['author'].display_avatar.url)
+
+        for sticker in thing['stickers']:
+            embed.add_field(
+                name=f"Sticker: `{sticker.name}`",
+                value=f"ID: [`{sticker.id}`]({sticker.url})"
+            )
+        if len(thing['stickers']) == 1:
+            embed.set_thumbnail(url=thing['stickers'][0].url)
+
+        return embed, thing['attachments']
+
+    @commands.cooldown(3, 15, commands.BucketType.user)
     @not_opted_out()
     # @voter_only()
     @commands.command(aliases=['s'], help="Snipe the last deleted message.")
-    async def snipe(self, ctx: commands.Context, amount='1', channel: discord.TextChannel = None):
-        prefix = ctx.clean_prefix
-        if channel is None:
-            channel = ctx.channel
-        if amount == 'last' and channel.id in self.sniped_msgs:
-            amount = len(self.sniped_msgs[channel.id])
-        if amount == 'first':
-            amount = 1
-        try:
-            amount = int(amount)
-            if amount <= 0:
-                return await ctx.reply(embed=error_embed(
-                    f"{EMOJIS['tick_no']} Positive values only!",
-                    "The amount should be a positive integer."
-                ))
-            if amount > 5:
-                return await ctx.reply(embed=error_embed(
-                    f"{EMOJIS['tick_no']} Too big!",
-                    "You can only snipe upto 5 messages!"
-                ))
-        except Exception:
+    async def snipe(self, ctx: commands.Context, amount: Optional[int] = 1, channel: discord.TextChannel = None):
+        channel = channel or ctx.channel
+        if amount <= 0:
             return await ctx.reply(embed=error_embed(
-                f"{EMOJIS['tick_no']} Not an integer!",
-                f"The amount must be an integer!\nExample: `{prefix}snipe 3`"
+                f"{EMOJIS['tick_no']} Positive values only!",
+                "The amount should be a positive integer."
+            ))
+        if amount > 5:
+            return await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Too big!",
+                "You can only snipe upto 5 messages!"
             ))
         if channel.id not in self.sniped_msgs:
             return await ctx.reply(embed=error_embed(
@@ -359,52 +420,45 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
                 f"{EMOJIS['tick_no']} No deleted message!",
                 f"This channel has only **{len(self.sniped_msgs[channel.id])}** deleted messages!"
             ))
+        embed, files = await self.get_sniped_msg_embed(channel.id, amount)
+        await ctx.send(embed=embed, files=files)
 
-        thing = self.sniped_msgs[channel.id][len(self.sniped_msgs[channel.id]) - amount]
+    @commands.cooldown(1, 60, commands.BucketType.user)
+    @not_opted_out()
+    @commands.command(aliases=['ms'], help="Get the last 5 snipe messages.")
+    async def multisnipe(self, ctx: commands.Context, channel: Optional[discord.TextChannel] = None):
+        channel = channel or ctx.channel
+        embeds = []
+        msg = await ctx.reply(f"{EMOJIS['loading']}Fetching sniped messages...")
+        for i in range(1, 6):
+            try:
+                embed, useless = await self.get_sniped_msg_embed(channel.id, i)
+                embeds.append(embed)
+            except Exception:
+                pass
+        if len(embeds) == 0:
+            ctx.command.reset_cooldown(ctx)
+            return await msg.edit(content=f"{EMOJIS['tick_no']}There are no sniped messages in this channel.")
+        if len(embeds) == 1:
+            return await msg.edit(content="", embed=embeds[0])
+        view = Paginator(ctx, embeds)
+        await msg.edit(content="", embed=embeds[0].set_footer(text=f"Page: 1/{len(embeds)}"), view=view)
 
-        embed = discord.Embed(
-            description=thing['content'],
-            color=MAIN_COLOR,
-            timestamp=thing['time']
-        ).set_author(name=thing['author'].name, icon_url=thing['author'].avatar.url)
-
-        for sticker in thing['stickers']:
-            embed.add_field(
-                name=f"Sticker: `{sticker.name}`",
-                value=f"ID: [`{sticker.id}`]({sticker.url})"
-            )
-        if len(thing['stickers']) == 1:
-            embed.set_thumbnail(url=thing['stickers'][0].url)
-        await ctx.send(embed=embed, files=thing['attachments'])
-
-    @commands.cooldown(1, 15, commands.BucketType.user)
+    @commands.cooldown(3, 15, commands.BucketType.user)
     @not_opted_out()
     # @voter_only()
     @commands.command(aliases=['es'], help="Snipe the last edited message.")
-    async def editsnipe(self, ctx: commands.Context, amount=1, channel: discord.TextChannel = None):
-        prefix = ctx.clean_prefix
-        if channel is None:
-            channel = ctx.channel
-        if amount == 'last' and channel.id in self.edited_msgs:
-            amount = len(self.edited_msgs[channel.id])
-        if amount == 'first':
-            amount = 1
-        try:
-            amount = int(amount)
-            if amount <= 0:
-                return await ctx.reply(embed=error_embed(
-                    f"{EMOJIS['tick_no']} Positive values only!",
-                    "The amount should be a positive integer."
-                ))
-            if amount > 5:
-                return await ctx.reply(embed=error_embed(
-                    f"{EMOJIS['tick_no']} Too big!",
-                    "You can only snipe upto 5 messages!"
-                ))
-        except Exception:
+    async def editsnipe(self, ctx: commands.Context, amount: Optional[int] = 1, channel: discord.TextChannel = None):
+        channel = channel or ctx.channel
+        if amount <= 0:
             return await ctx.reply(embed=error_embed(
-                f"{EMOJIS['tick_no']} Not an integer!",
-                f"The amount must be an integer!\nExample: `{prefix}editsnipe 3`"
+                f"{EMOJIS['tick_no']} Positive values only!",
+                "The amount should be a positive integer."
+            ))
+        if amount > 5:
+            return await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Too big!",
+                "You can only snipe upto 5 messages!"
             ))
         if channel.id not in self.edited_msgs:
             return await ctx.reply(embed=error_embed(
@@ -422,7 +476,7 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
         embed = discord.Embed(
             color=MAIN_COLOR,
             timestamp=thing['time']
-        ).set_author(name=thing['author'].name, icon_url=thing['author'].avatar.url
+        ).set_author(name=thing['author'].name, icon_url=thing['author'].display_avatar.url
         ).add_field(name="Before:", value=thing['before'] if len(thing['before']) <= 1024 else thing['before'][0: 1023], inline=False
         ).add_field(name="After:", value=thing['after'] if len(thing['after']) <= 1024 else thing['after'][0: 1023], inline=False)
 
@@ -536,6 +590,35 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
 
         await msg.edit(embed=embed)
 
+    @commands.command(help="Calculate how sus someone is!", aliases=['suscalculator'])
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def howsus(self, ctx, user: Optional[discord.Member] = None):
+        user = user or ctx.author
+        msg = await ctx.reply(embed=discord.Embed(
+            title="Calculating how sus you are...",
+            color=MAIN_COLOR
+        ))
+        await asyncio.sleep(0.5)
+        sus_number = random.randint(0, 100)
+        if 0 <= sus_number <= 20:
+            embed_color_uwu = RED_COLOR
+            embed_footer = "Crewmate confirmed!"
+        if 20 < sus_number <= 50:
+            embed_color_uwu = ORANGE_COLOR
+            embed_footer = "Kinda sus"
+        if 50 < sus_number <= 100:
+            embed_color_uwu = MAIN_COLOR
+            embed_footer = "You are sus, uwu"
+        if sus_number == 100:
+            embed_color_uwu = PINK_COLOR
+            embed_footer = "YOU SUSSY BAKA!"
+        embed = discord.Embed(
+            title="Suspiciousness calculator!",
+            description=f"**{escape_markdown(str(user))}** is **{sus_number}%** sus!",
+            color=embed_color_uwu
+        ).set_footer(text=embed_footer)
+        await msg.edit(embed=embed)
+
     @commands.command(aliases=['fm', 'firstmsg', 'firstmessage', 'first_msg'], help="Get the first message of the channel.")
     @commands.cooldown(3, 30, commands.BucketType.user)
     @commands.bot_has_permissions(read_message_history=True)
@@ -630,7 +713,7 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
             description=f"**{escape_markdown(str(user))}** is gonna die in **{thingy}**",
             color=embed_color,
         )
-        embed.set_author(name=user.name, icon_url=user.avatar.url)
+        embed.set_author(name=user.name, icon_url=user.display_avatar.url)
         embed.set_footer(text=funny_text)
 
         await msg.edit(embed=embed)
@@ -765,12 +848,26 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.command(help="Funny, funny jokes!", aliases=['dadjoke'])
     async def joke(self, ctx):
-        await ctx.message.reply(embed=success_embed("Haha!", dadjoke.joke))
+        await ctx.reply(embed=success_embed("Haha!", dadjoke.joke))
 
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.command(help="Funny, funny memes!")
-    async def meme(self, ctx):
-        await ctx.message.reply(embed=await pick_random_url_from_reddit('dankmemes', 'Haha!'))
+    async def meme(self, ctx: commands.Context):
+        await ctx.reply(embed=await pick_random_url_from_reddit('dankmemes', 'Haha!'))
+
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    @commands.command(help="Random fun facts!")
+    async def fact(self, ctx: commands.Context):
+        headers = {'Authorization': DAGPI_KEY}
+        async with self.client.session.get("https://api.dagpi.xyz/data/fact", headers=headers) as resp:
+            data = await resp.json()
+            if "error" in data:
+                ctx.command.reset_cooldown(ctx)
+                return await ctx.reply(embed=error_embed("An error occured!", data['error']))
+            return await ctx.reply(embed=success_embed(
+                "Random Fact",
+                data['fact']
+            ).set_thumbnail(url=random.choice(THINKING_EMOJI_URLS)))
 
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.command(help="Get a random quote!")
@@ -818,12 +915,12 @@ Another Example: `{prefix}shouldi Study OR Procrastinate`
                 return await ctx.reply(f"{EMOJIS['tick_no']}Only `png` format is allowed.")
 
         if isinstance(text, discord.Member):
-            file_bytes = await text.avatar.replace(format='png', size=256).read()
+            file_bytes = await text.display_avatar.replace(format='png', size=256).read()
 
         if isinstance(text, str):
             res = pyfiglet.figlet_format(text)
         else:
-            res = await self.client.loop.run_in_executor(None, functools.partial(effects.ascii, file_bytes))
+            res = await self.client.loop.run_in_executor(None, functools.partial(ascii, file_bytes))
 
         try:
             await ctx.reply(f"```{res}```")

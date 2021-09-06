@@ -15,120 +15,32 @@ limitations under the License.
 """
 
 from logging import basicConfig, INFO
-from discord import (
-    Intents,
-    AllowedMentions,
-    Activity,
-    ActivityType
-)
-from config import EMOJIS, BOT_TOKEN
-from utils.embed import success_embed
+from config import BOT_TOKEN, BOT_TOKEN_BETA, OWNERS
 from utils.bot import EpicBot
-from utils.help2 import EpicBotHelp
 from os import environ
-from utils.ui import ButtonSelfRoleView, DropDownSelfRoleView, TicketView
 
 basicConfig(level=INFO)
 
-intents = Intents.default()
-intents.members = True
-client = EpicBot(
-    command_prefix=EpicBot.get_custom_prefix,
-    intents=Intents.all(),
-    case_insensitive=True,
-    allowed_mentions=AllowedMentions.none(),
-    strip_after_prefix=True,
-    help_command=EpicBotHelp(),
-    cached_messages=10000,
-    activity=Activity(type=ActivityType.playing, name="e/help | beta.epic-bot.com")
-)
+client = EpicBot()
 environ.setdefault("JISHAKU_HIDE", "1")
 environ.setdefault("JISHAKU_NO_UNDERSCORE", "1")
 
 
 @client.check
 async def check_commands(ctx):
-    if ctx.guild is not None:
-        g = await client.get_guild_config(ctx.guild.id)
-        dc = g['disabled_cmds']
-        dch = g['disabled_channels']
-    return (ctx.guild is not None) and (ctx.command.name not in dc) and (ctx.channel.id not in dch)
+    if client.beta:
+        if ctx.message.author.id not in OWNERS:
+            return False  # if running beta version, then only allow owners
+        return True
+    if ctx.guild is None:
+        return False
+    g = await client.get_guild_config(ctx.guild.id)
+    dc = g['disabled_cmds']
+    dch = g['disabled_channels']
+    dcc = g.get('disabled_categories', [])
+    dcc_cogs = [client.get_cog(cog) for cog in dcc]
+    return (ctx.command.name not in dc) and (ctx.channel.id not in dch) and (ctx.command.cog not in dcc_cogs)
 
-
-@client.event
-async def on_message(message):
-    if not client.cache_loaded:
-        return
-    if message.author.bot:
-        return
-    for e in client.blacklisted_cache:
-        if message.author.id == e['_id']:
-            return
-    if message.content.lower() in [f'<@{client.user.id}>', f'<@!{client.user.id}>']:
-        prefixes = await client.fetch_prefix(message)
-        prefix_text = ""
-        for prefix in prefixes:
-            prefix_text += f"`{prefix}`, "
-        prefix_text = prefix_text[:-2]
-        return await message.reply(embed=success_embed(
-            f"{EMOJIS['wave_1']} Hello!",
-            f"My prefix{'es' if len(prefixes) > 1 else ''} for this server {'are' if len(prefixes) > 1 else 'is'}: {prefix_text}"
-        ))
-
-    await client.process_commands(message)
-
-
-@client.event
-async def on_message_edit(before, after):
-    if before.content == after.content:
-        return
-    if before.author.bot:
-        return
-    if not client.cache_loaded:
-        return
-    if not client.cogs_loaded:
-        return
-    client.dispatch("message", after)
-
-
-@client.event
-async def on_ready():
-    print(f"Logged in as {client.user}")
-
-    if not client.cache_loaded:
-        await client.get_cache()
-        await client.get_blacklisted_users()
-        client.cache_loaded = True
-
-    if not client.cogs_loaded:
-        client.load_extension('jishaku')
-        print("Loaded jsk!")
-        await client.load_extensions('./cogs')
-        await client.load_extensions('./cogs_hidden')
-        client.cogs_loaded = True
-
-    if not client.views_loaded:
-        client.add_view(TicketView())
-        client.views_loaded = True
-        print("Ticket view has been loaded.")
-
-    if not client.rolemenus_loaded:
-        i = 0
-        cursor = client.self_roles.find({})
-        h = await cursor.to_list(length=None)
-        for amogus in h:
-            guild = client.get_guild(amogus['_id'])
-            role_menus = amogus['role_menus']
-            for msg_id, menu in role_menus.items():
-                if menu['type'] == 'dropdown':
-                    client.add_view(DropDownSelfRoleView(guild, menu['stuff']), message_id=int(msg_id))
-                    i += 1
-                if menu['type'] == 'button':
-                    client.add_view(ButtonSelfRoleView(guild, menu['stuff']), message_id=int(msg_id))
-                    i += 1
-        client.rolemenus_loaded = True
-
-        print(f"{i} Self role views has been loaded.")
 
 if __name__ == '__main__':
-    client.run(BOT_TOKEN)
+    client.run(BOT_TOKEN if not client.beta else BOT_TOKEN_BETA)

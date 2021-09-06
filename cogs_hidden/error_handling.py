@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from utils.converters import InvalidTimeZone
 import discord
 import traceback
 import json
@@ -26,11 +25,12 @@ from utils.embed import (
     error_embed
 )
 from config import (
-    OWNERS, EMOJIS, ERROR_LOG_CHANNEL,
-    MAIN_COLOR, VOTE_LINK, RED_COLOR
+    OWNERS, EMOJIS, MAIN_COLOR, SUPPORT_SERVER_LINK,
+    VOTE_LINK, RED_COLOR
 )
 from utils.random import gen_random_string
-from utils.custom_checks import NotVoted, NotBotMod, OptedOut
+from utils.custom_checks import NotVoted, NotBotMod, OptedOut, PrivateCommand
+from utils.converters import ImportantCategory, InvalidTimeZone, InvalidCategory
 from humanfriendly import format_timespan
 from utils.bot import EpicBot
 
@@ -117,7 +117,7 @@ class ErrorHandling(commands.Cog):
                 "This command can only be used in a **NSFW** channel."
             ))
         elif isinstance(error, commands.NotOwner):
-            await self.client.get_channel(ERROR_LOG_CHANNEL).send(
+            await self.client.get_channel(800252938869669898).send(
                 embed=discord.Embed(
                     title="Someone tried to use Owner only command!",
                     description=f"```{ctx.message.content}```",
@@ -188,9 +188,27 @@ class ErrorHandling(commands.Cog):
                 f"{EMOJIS['tick_no']} Invalid Timezone!",
                 f"Please use a valid timezone.\nClick **[here](https://github.com/nirlep5252/epicbot/tree/main/other/timezones.txt)** to see the list of valid timezones.\n\nYou can also set your timezone using `{ctx.clean_prefix}settimezone <timezone>` for all commands."
             ))
+        elif isinstance(error, InvalidCategory):
+            ctx.command.reset_cooldown(ctx)
+            await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Invalid Category!",
+                f"The category `{error.category}` is not a valid category!\nPlease use `{prefix}help` to see the list of valid categories."
+            ))
+        elif isinstance(error, ImportantCategory):
+            ctx.command.reset_cooldown(ctx)
+            await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Important Category!",
+                f"You cannot disable the `{error.category}` category!\nIt has contains the core features of epicbot\nFor more info join our [Support Server]({SUPPORT_SERVER_LINK})."
+            ))
+        elif isinstance(error, PrivateCommand):
+            await ctx.reply(embed=error_embed(
+                f"{EMOJIS['tick_no']} Private Command!",
+                "This command is private and you cannot use it."
+            ))
         elif isinstance(error, commands.CheckFailure):
             ctx.command.reset_cooldown(ctx)
-            await ctx.message.add_reaction('❌')
+            if not self.client.beta:
+                await ctx.message.add_reaction('❌')
         else:
             random_error_id = gen_random_string(10)
             ctx.command.reset_cooldown(ctx)
@@ -209,7 +227,9 @@ class ErrorHandling(commands.Cog):
             ).set_footer(text=f"ERROR ID: {random_error_id}")
 
             try:
-                await self.client.get_channel(ERROR_LOG_CHANNEL).send(embed=error_embed_)
+                webhooks = self.client.get_cog("Webhooks").webhooks
+                webhook = webhooks.get("cmd_error")
+                await webhook.send(embed=error_embed_)
             except Exception:
                 traceback.print_exception(etype=type(error), value=error, tb=error.__traceback__)
 

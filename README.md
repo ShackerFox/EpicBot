@@ -25,12 +25,14 @@
 
 <h2><img src="https://cdn.discordapp.com/emojis/818758128329556018.gif?v=1" height="20px"> • Features</h2>
 <ul>
-  <li>📌 Over 180+ commands!</li>
+  <li>📌 Over 200+ commands!</li>
   <li>🔼 99%+ uptime.</li>
   <li>🟢 Low latency, super fast response time.</li>
   <li>💻 Web dashboard!</li>
   <li>🛠️ Custom Commands.</li>
   <li>✨ Level up system, with leveling roles.</li>
+  <li>🏷️ Reaction Roles!</li>
+  <li>🏓 Twitch notifications!</li>
   <li>📨 Autoposting (automeme, autowaifu, etc...)</li>
   <li>🎶 Extremely high quality Music playback.</li>
   <li>🌍 Global chat.</li>
@@ -54,6 +56,36 @@
   <li>Submit a pull request</li>
 </ol>
 
-<h4><b>Note:</b> We do not provide support for self hosting. If you are unable to self host EpicBot by yourself, just use EpicBot which we put lot's of work into.</h4>
+<h2><img src="https://cdn.discordapp.com/emojis/585956493392871424.png?v=1" height="20px"> • How to selfhost EpicBot?</h2>
+
+Be sure to follow the [license](https://github.com/Nirlep5252/EpicBot/blob/main/LICENSE.md) <br>
+**If I ever find you running EpicBot's code without credits given to ALL of the contributors, you are X_X 🔪** <br><br>
+Here are the steps that you can follow to sefhost EpicBot which would work with <b>most</b> hosting providers:
+
+- Clone the repo: <br>
+
+    ```
+    $ git clone https://github.com/Nirlep5252/EpicBot 
+    ```
+- Install all the required packages: <br>
+
+    ```
+    $ pip install -r requirements.txt 
+    ```
+- Setup the [`config.py`](https://github.com/Nirlep5252/EpicBot/blob/main/other/CONFIG.md) file.
+- Run the bot: <br>
+
+    ```
+    $ python main.py 
+    ```
+- [Enjoy!](https://discord.gg/Zj7h8Fp)
+
+<h4><b>Note:</b> We do not provide support for self-hosting. If you are unable to self host EpicBot by yourself, just use EpicBot which we put lot's of work into.</h4>
+
+<h2><img src="https://cdn.discordapp.com/emojis/787059013942509609.png?v=1" height="20px"> • Self-hosting Agreement</h2>
+
+- You must not use EpicBot's name, license, or logo in your works.
+- You must follow the license as stated [here](https://github.com/Nirlep5252/EpicBot/blob/main/LICENSE.md).
+- Provide full credits to both CONTRIBUTORS and the original creator.
 
 <h3 align="center"><a href="https://discord.com/oauth2/authorize?client_id=751100444188737617&scope=bot&permissions=2146958847">Invite EpicBot</a> | <a href="https://discord.gg/Zj7h8Fp">Discord Server</a> | <a href="https://epic-bot.com">Website</a></h3>

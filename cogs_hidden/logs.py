@@ -20,8 +20,7 @@ from discord.ext import commands
 from utils.embed import success_embed, error_embed
 from utils.bot import EpicBot
 from config import (
-    COMMANDS_LOG_CHANNEL, ADD_REMOVE_LOG_CHANNEL,
-    DM_LOG_CHANNEL, COOLDOWN_BYPASS, EMOJIS,
+    COOLDOWN_BYPASS, EMOJIS, OWNERS,
     PREFIX, MAIN_COLOR, EMPTY_CHARACTER, WEBSITE_LINK,
     SUPPORT_SERVER_LINK
 )
@@ -30,9 +29,6 @@ from config import (
 class Logs(commands.Cog):
     def __init__(self, client: EpicBot):
         self.client = client
-        self.cmd_log_channel = self.client.get_channel(COMMANDS_LOG_CHANNEL)
-        self.add_remove_log_channel = self.client.get_channel(ADD_REMOVE_LOG_CHANNEL)
-        self.dm_log_channel = self.client.get_channel(DM_LOG_CHANNEL)
 
     @commands.Cog.listener(name="on_command_completion")
     async def add_cmd_used_count_user_profile(self, ctx: commands.Context):
@@ -43,14 +39,19 @@ class Logs(commands.Cog):
     async def on_command(self, ctx: commands.Context):
         if ctx.author.id in COOLDOWN_BYPASS:
             ctx.command.reset_cooldown(ctx)
+        if ctx.author.id in OWNERS:
+            return
 
         embed = success_embed(
             "Ah yes",
             "Some kid used me"
         ).add_field(name="Command:", value=f"```{ctx.message.content}```", inline=False
         ).add_field(name="User:", value=f"{ctx.author.mention}```{ctx.author}\n{ctx.author.id}```", inline=False
-        ).add_field(name="Server:", value=f"```{ctx.guild}\n{ctx.guild.id}```", inline=False)
-        await self.cmd_log_channel.send(embed=embed)
+        ).add_field(name="Server:", value=f"```{ctx.guild}\n{ctx.guild.id}```", inline=False
+        ).add_field(name="Channel:", value=f"{ctx.channel.mention}```{ctx.channel}\n{ctx.channel.id}```", inline=False)
+        webhooks = self.client.get_cog("Webhooks").webhooks
+        webhook = webhooks.get("cmd_uses")
+        await webhook.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -69,11 +70,12 @@ class Logs(commands.Cog):
                 value=f"{message.author.mention}```{message.author}\n{message.author.id}```",
                 inline=False
             )
-            await self.dm_log_channel.send(embed=embed, files=files)
+            await self.client.get_channel(793482521076695070).send(embed=embed, files=files)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
         await self.client.get_guild_config(guild.id)
+
         embed = success_embed(
             f"{EMOJIS['add']}  EpicBot Added",
             f"""
@@ -83,9 +85,14 @@ class Logs(commands.Cog):
 **Humans:** {len(list(filter(lambda m: not m.bot, guild.members)))}
 **Bots:** {len(list(filter(lambda m: m.bot, guild.members)))}
             """
-        ).set_author(name=guild.owner, icon_url=guild.owner.avatar.url
-        ).set_thumbnail(url=guild.icon.url)
-        await self.add_remove_log_channel.send(embed=embed)
+        ).set_author(name=guild.owner, icon_url=guild.owner.display_avatar.url)
+        if guild.icon is not None:
+            embed.set_thumbnail(url=guild.icon.url)
+        try:
+            webhook = self.client.get_cog("Webhooks").webhooks.get("add_remove")
+            await webhook.send(embed=embed)
+        except Exception:
+            pass
 
         send_embed = discord.Embed(
             title=f"{EMOJIS['wave_1']} Hi, UwU!~",
@@ -102,8 +109,8 @@ Let me tell you more about me!
 I hope you have a fun time with me, UwU!~
                         """,
             color=MAIN_COLOR
-        ).set_thumbnail(url=self.client.user.avatar.url
-        ).set_author(name=self.client.user.name, icon_url=self.client.user.avatar.url
+        ).set_thumbnail(url=self.client.user.display_avatar.url
+        ).set_author(name=self.client.user.name, icon_url=self.client.user.display_avatar.url
         ).add_field(name=EMPTY_CHARACTER, value=f"[Invite EpicBot]({WEBSITE_LINK}/invite) | [Vote EpicBot]({WEBSITE_LINK}/vote) | [Support Server]({SUPPORT_SERVER_LINK})", inline=False)
 
         for channel in guild.channels:
@@ -131,21 +138,22 @@ I hope you have a fun time with me, UwU!~
         embed = error_embed(
             f"{EMOJIS['remove']}  EpicBot Removed",
             f"""
-```yaml
-Server: {guild} ({guild.id})
-Owner: {guild.owner} ({guild.owner_id})
-Members: {guild.member_count}
-Humans: {len(list(filter(lambda m: not m.bot, guild.members)))}
-Bots: {len(list(filter(lambda m: m.bot, guild.members)))}
-```
+**Server:** ```{guild} ({guild.id})```
+**Owner:** {guild.owner.mention}```{guild.owner} ({guild.owner_id})```
+**Members:** {guild.member_count}
+**Humans:** {len(list(filter(lambda m: not m.bot, guild.members)))}
+**Bots:** {len(list(filter(lambda m: m.bot, guild.members)))}
             """
-        )
-        await self.add_remove_log_channel.send(embed=embed)
+        ).set_author(name=guild.owner, icon_url=guild.owner.display_avatar.url)
+        if guild.icon is not None:
+            embed.set_thumbnail(url=guild.icon.url)
         for e in self.client.serverconfig_cache:
             if e['_id'] == guild.id:
                 self.client.serverconfig_cache.remove(e)
                 await self.client.serverconfig.delete_one({"_id": guild.id})
-                return
+                break
+        webhook = self.client.get_cog("Webhooks").webhooks.get("add_remove")
+        await webhook.send(embed=embed)
 
 
 def setup(client):
